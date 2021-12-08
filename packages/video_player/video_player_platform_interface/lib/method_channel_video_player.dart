@@ -116,6 +116,11 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           return VideoEvent(
             eventType: VideoEventType.completed,
           );
+        case 'durationUpdate':
+          return VideoEvent(
+            duration: Duration(milliseconds: map['duration']),
+            eventType: VideoEventType.durationUpdate,
+          );
         case 'bufferingUpdate':
           final List<dynamic> values = map['values'];
 
@@ -127,6 +132,16 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           return VideoEvent(eventType: VideoEventType.bufferingStart);
         case 'bufferingEnd':
           return VideoEvent(eventType: VideoEventType.bufferingEnd);
+        case 'advertisementStart':
+          return VideoEvent(
+            eventType: VideoEventType.advertisementStart,
+            duration: Duration(milliseconds: map['duration']),
+          );
+        case 'advertisementEnd':
+          return VideoEvent(
+            eventType: VideoEventType.advertisementEnd,
+            duration: Duration(milliseconds: map['duration']),
+          );
         default:
           return VideoEvent(eventType: VideoEventType.unknown);
       }

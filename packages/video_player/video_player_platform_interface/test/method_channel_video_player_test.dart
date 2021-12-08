@@ -11,6 +11,8 @@ import 'package:video_player_platform_interface/method_channel_video_player.dart
 import 'package:video_player_platform_interface/test.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
+import '../lib/messages.dart';
+
 class _ApiLogger implements TestHostVideoPlayerApi {
   final List<String> log = [];
   TextureMessage? textureMessage;
@@ -20,6 +22,7 @@ class _ApiLogger implements TestHostVideoPlayerApi {
   VolumeMessage? volumeMessage;
   PlaybackSpeedMessage? playbackSpeedMessage;
   MixWithOthersMessage? mixWithOthersMessage;
+  AdvertisementMessage? advertisementMessage;
 
   @override
   TextureMessage create(CreateMessage arg) {
@@ -86,6 +89,12 @@ class _ApiLogger implements TestHostVideoPlayerApi {
   void setPlaybackSpeed(PlaybackSpeedMessage arg) {
     log.add('setPlaybackSpeed');
     playbackSpeedMessage = arg;
+  }
+
+  @override
+  void setAdvertisement(AdvertisementMessage arg) {
+    log.add('setAdvertisement');
+    advertisementMessage = arg;
   }
 }
 
@@ -231,6 +240,13 @@ void main() {
       expect(log.log.last, 'position');
       expect(log.textureMessage?.textureId, 1);
       expect(position, const Duration(milliseconds: 234));
+    });
+
+    test('setAdvertisement', () async {
+      await player.setAdvertisement('advertisement tag');
+      expect(log.log.last, 'setAdvertisement');
+      // TODO We should have dedicated texture id for the Ad
+      expect(log.advertisementMessage?.adTag, 'advertisement tag');
     });
 
     test('videoEventsFor', () async {
