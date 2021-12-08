@@ -30,13 +30,13 @@ dependencies:
     git:
       url: git@github.com:jaggernod/plugins.git
       path: packages/video_player/video_player_platform_interface
-      ref: injectable-platform
+      ref: inject-ads
 
   video_player_web:
     git:
       url: git@github.com:jaggernod/plugins.git
       path: packages/video_player/video_player_web
-      ref: injectable-platform
+      ref: inject-ads
 
   html: ^0.15.0
 
