@@ -127,6 +127,11 @@ abstract class VideoPlayerPlatform {
   // This private method is called by the instance setter, which fails if the class is
   // implemented with `implements`.
   void _verifyProvidesDefaultImplementations() {}
+
+  /// Sets the Advertisement tag for IMA
+  Future<void> setAdvertisement(String adTag) {
+    throw UnimplementedError('setAdvertisement() has not been implemented.');
+  }
 }
 
 /// Description of the data source used to create an instance of
@@ -287,6 +292,15 @@ enum VideoEventType {
 
   /// The video stopped to buffer.
   bufferingEnd,
+
+  /// Case when ad is finished we should update duration
+  durationUpdate,
+
+  /// The ad started to play
+  advertisementStart,
+
+  /// The ad stopped to play
+  advertisementEnd,
 
   /// An unknown event has been received.
   unknown,

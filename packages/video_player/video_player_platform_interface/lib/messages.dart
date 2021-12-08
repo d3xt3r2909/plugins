@@ -146,6 +146,22 @@ class MixWithOthersMessage {
   }
 }
 
+class AdvertisementMessage {
+  String? adTag;
+
+  Object encode() {
+    final Map<Object?, Object?> pigeonMap = <Object?, Object?>{};
+    pigeonMap['adTag'] = adTag;
+    return pigeonMap;
+  }
+
+  static AdvertisementMessage decode(Object message) {
+    final Map<Object?, Object?> pigeonMap = message as Map<Object?, Object?>;
+    return AdvertisementMessage()..adTag = pigeonMap['adTag'] as String?;
+  }
+}
+
+
 class VideoPlayerApi {
   Future<void> initialize() async {
     const BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(

@@ -6,7 +6,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -18,8 +21,8 @@ import 'src/closed_caption_file.dart';
 export 'src/closed_caption_file.dart';
 
 final VideoPlayerPlatform _videoPlayerPlatform = VideoPlayerPlatform.instance
-  // This will clear all open videos on the platform when a full restart is
-  // performed.
+// This will clear all open videos on the platform when a full restart is
+// performed.
   ..init();
 
 /// The duration, current position, buffering state, error state and settings
@@ -37,6 +40,7 @@ class VideoPlayerValue {
     this.isPlaying = false,
     this.isLooping = false,
     this.isBuffering = false,
+    this.isAdPlaying = false,
     this.volume = 1.0,
     this.playbackSpeed = 1.0,
     this.errorDescription,
@@ -49,9 +53,9 @@ class VideoPlayerValue {
   /// Returns an instance with the given [errorDescription].
   VideoPlayerValue.erroneous(String errorDescription)
       : this(
-            duration: Duration.zero,
-            isInitialized: false,
-            errorDescription: errorDescription);
+      duration: Duration.zero,
+      isInitialized: false,
+      errorDescription: errorDescription);
 
   /// The total duration of the video.
   ///
@@ -117,6 +121,9 @@ class VideoPlayerValue {
     return aspectRatio;
   }
 
+  /// True if ad is playing
+  final bool isAdPlaying;
+
   /// Returns a new instance that has the same values as this current instance,
   /// except for any overrides passed in as arguments to [copyWidth].
   VideoPlayerValue copyWith({
@@ -129,6 +136,7 @@ class VideoPlayerValue {
     bool? isPlaying,
     bool? isLooping,
     bool? isBuffering,
+    bool? isAdPlaying,
     double? volume,
     double? playbackSpeed,
     String? errorDescription,
@@ -146,6 +154,7 @@ class VideoPlayerValue {
       volume: volume ?? this.volume,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       errorDescription: errorDescription ?? this.errorDescription,
+      isAdPlaying: isAdPlaying ?? this.isAdPlaying,
     );
   }
 
@@ -161,6 +170,7 @@ class VideoPlayerValue {
         'isPlaying: $isPlaying, '
         'isLooping: $isLooping, '
         'isBuffering: $isBuffering, '
+        'isAdPlaying: $isAdPlaying, '
         'volume: $volume, '
         'playbackSpeed: $playbackSpeed, '
         'errorDescription: $errorDescription)';
@@ -199,13 +209,13 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   /// the video format detection code.
   /// [httpHeaders] option allows to specify HTTP headers
   /// for the request to the [dataSource].
-  VideoPlayerController.network(
-    this.dataSource, {
+  VideoPlayerController.network(this.dataSource, {
     this.formatHint,
     this.closedCaptionFile,
     this.videoPlayerOptions,
     this.httpHeaders = const {},
-  })  : dataSourceType = DataSourceType.network,
+  })
+      : dataSourceType = DataSourceType.network,
         package = null,
         super(VideoPlayerValue(duration: Duration.zero));
 
@@ -229,7 +239,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   VideoPlayerController.contentUri(Uri contentUri,
       {this.closedCaptionFile, this.videoPlayerOptions})
       : assert(defaultTargetPlatform == TargetPlatform.android,
-            'VideoPlayerController.contentUri is only supported on Android.'),
+  'VideoPlayerController.contentUri is only supported on Android.'),
         dataSource = contentUri.toString(),
         dataSourceType = DataSourceType.contentUri,
         package = null,
@@ -349,10 +359,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           _applyPlayPause();
           break;
         case VideoEventType.completed:
-          // In this case we need to stop _timer, set isPlaying=false, and
-          // position=value.duration. Instead of setting the values directly,
-          // we use pause() and seekTo() to ensure the platform stops playing
-          // and seeks to the last frame of the video.
+        // In this case we need to stop _timer, set isPlaying=false, and
+        // position=value.duration. Instead of setting the values directly,
+        // we use pause() and seekTo() to ensure the platform stops playing
+        // and seeks to the last frame of the video.
           pause().then((void pauseResult) => seekTo(value.duration));
           break;
         case VideoEventType.bufferingUpdate:
@@ -363,6 +373,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           break;
         case VideoEventType.bufferingEnd:
           value = value.copyWith(isBuffering: false);
+          break;
+        case VideoEventType.advertisementStart:
+          value = value.copyWith(isAdPlaying: true);
+          break;
+        case VideoEventType.advertisementEnd:
+          value = value.copyWith(isAdPlaying: false);
           break;
         case VideoEventType.unknown:
           break;
@@ -453,7 +469,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       _timer?.cancel();
       _timer = Timer.periodic(
         const Duration(milliseconds: 500),
-        (Timer timer) async {
+            (Timer timer) async {
           if (_isDisposed) {
             return;
           }
@@ -500,10 +516,13 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
 
   /// The position in the current video.
   Future<Duration?> get position async {
+    print('::> inside position 1 $_isDisposed');
     if (_isDisposed) {
       return null;
     }
-    return await _videoPlayerPlatform.getPosition(_textureId);
+    final t = await _videoPlayerPlatform.getPosition(_textureId);
+    print('::> inside position 2 $t');
+    return t;
   }
 
   /// Sets the video's current timestamp to be at [moment]. The next
@@ -813,8 +832,7 @@ class VideoProgressIndicator extends StatefulWidget {
   /// Defaults will be used for everything except [controller] if they're not
   /// provided. [allowScrubbing] defaults to false, and [padding] will default
   /// to `top: 5.0`.
-  VideoProgressIndicator(
-    this.controller, {
+  VideoProgressIndicator(this.controller, {
     this.colors = const VideoProgressColors(),
     required this.allowScrubbing,
     this.padding = const EdgeInsets.only(top: 5.0),
@@ -969,10 +987,13 @@ class ClosedCaption extends StatelessWidget {
     }
 
     final TextStyle effectiveTextStyle = textStyle ??
-        DefaultTextStyle.of(context).style.copyWith(
-              fontSize: 36.0,
-              color: Colors.white,
-            );
+        DefaultTextStyle
+            .of(context)
+            .style
+            .copyWith(
+          fontSize: 36.0,
+          color: Colors.white,
+        );
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -990,6 +1011,248 @@ class ClosedCaption extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Overlay for ad
+class AdOverlay extends StatefulWidget {
+  /// Overlay for ad
+  const AdOverlay({
+    Key? key,
+    required this.controller,
+  })
+      : assert(controller != null),
+        super(key: key);
+
+  /// Video controller
+  final VideoPlayerController controller;
+
+  @override
+  _AdOverlayState createState() => _AdOverlayState();
+}
+
+class _AdOverlayState extends State<AdOverlay>
+    with SingleTickerProviderStateMixin {
+  bool _isAdPlaying = false;
+  late final VoidCallback _listener;
+  late final AnimationController _controller;
+
+  int get textureId => widget.controller.textureId;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _listener = () {
+      if (widget.controller.value.isAdPlaying != _isAdPlaying) {
+        if (mounted) {
+          setState(() {});
+          _isAdPlaying = widget.controller.value.isAdPlaying;
+          if (_isAdPlaying) {
+            _controller.repeat();
+          } else {
+            _controller.stop();
+          }
+        }
+      }
+    };
+
+    widget.controller.addListener(_listener);
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 1),
+    );
+
+    _isAdPlaying = widget.controller.value.isAdPlaying;
+    if (_isAdPlaying) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(AdOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_listener);
+      widget.controller.addListener(_listener);
+
+      _isAdPlaying = widget.controller.value.isAdPlaying;
+      if (_isAdPlaying) {
+        _controller.repeat();
+      } else {
+        _controller.stop();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const viewType = 'NativeViewFactoryVideo';
+    return _isAdPlaying && textureId != null
+        ? PlatformViewLink(
+      viewType: viewType,
+      surfaceFactory: (BuildContext context,
+          PlatformViewController controller,) {
+        return AndroidViewSurface(
+          controller: controller as AndroidViewController,
+          gestureRecognizers: const <
+              Factory<OneSequenceGestureRecognizer>>{},
+          hitTestBehavior: PlatformViewHitTestBehavior.translucent,
+        );
+      },
+      onCreatePlatformView: (PlatformViewCreationParams params) {
+        return PlatformViewsService.initSurfaceAndroidView(
+          id: widget.controller.textureId,
+          viewType: viewType,
+          layoutDirection: TextDirection.ltr,
+          creationParams: <String, dynamic>{},
+          creationParamsCodec: const StandardMessageCodec(),
+        )
+          ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+          ..create();
+      },
+    )
+        : const SizedBox();
+  }
+}
+
+/// Workaround for the bugs
+/// https://github.com/sarbagyastha/youtube_player_flutter/issues/476
+/// https://github.com/googleads/googleads-mobile-flutter/issues/161
+///
+/// The mentioned plugins do interfeer with the scheduling for the update of the
+/// surface view.
+///
+/// Please remove when the mentioned bugs are addressed in their packages.
+@immutable
+class JitterlessVideoPlayer extends StatefulWidget {
+  /// Temp constructor
+  const JitterlessVideoPlayer({
+    Key? key,
+    required this.controller,
+    this.manualFrameInvalidation = true,
+  })
+      : assert(controller != null),
+        super(key: key);
+
+  /// Video controller
+  final VideoPlayerController controller;
+
+  /// Manual frame invalidation
+  final bool manualFrameInvalidation;
+
+  @override
+  _JitterlessVideoPlayerState createState() => _JitterlessVideoPlayerState();
+}
+
+class _JitterlessVideoPlayerState extends State<JitterlessVideoPlayer> {
+  _JitterlessVideoPlayerState() {
+    _isPlaying = false;
+    _listener = () {
+      final newTextureId = widget.controller.textureId;
+      if (newTextureId != _textureId) {
+        setState(() {
+          _textureId = newTextureId;
+        });
+      }
+
+      if (shouldScheduleRefresh) {
+        widget.controller.value.isPlaying
+            ? _scheduleRefresh()
+            : _unscheduleRefresh();
+
+        _isPlaying = widget.controller.value.isPlaying;
+      }
+    };
+  }
+
+  bool get shouldScheduleRefresh =>
+      widget.manualFrameInvalidation &&
+          widget.controller.value.isPlaying != _isPlaying;
+
+  late VoidCallback _listener;
+
+  late int _textureId;
+
+  late bool _isPlaying;
+
+  int? _frameCallbackId;
+
+  @override
+  void initState() {
+    super.initState();
+    _isPlaying = widget.controller.value.isPlaying;
+    _textureId = widget.controller.textureId;
+
+    if (widget.manualFrameInvalidation && _isPlaying) {
+      _scheduleRefresh();
+    }
+
+    widget.controller.addListener(_listener);
+  }
+
+  void _scheduleRefresh() {
+    _frameCallbackId =
+        SchedulerBinding.instance?.scheduleFrameCallback(_refresh);
+  }
+
+  void _unscheduleRefresh() {
+    if (_frameCallbackId == null) {
+      return;
+    }
+
+    SchedulerBinding.instance?.cancelFrameCallbackWithId(_frameCallbackId!);
+    _frameCallbackId = null;
+  }
+
+  void _refresh(Duration _) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+
+    _scheduleRefresh();
+  }
+
+  @override
+  void didUpdateWidget(JitterlessVideoPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    oldWidget.controller.removeListener(_listener);
+    _textureId = widget.controller.textureId;
+    widget.controller.addListener(_listener);
+  }
+
+  @override
+  void deactivate() {
+    super.deactivate();
+
+    widget.controller.removeListener(_listener);
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+
+    _unscheduleRefresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    return _textureId == VideoPlayerController.kUninitializedTextureId
+        ? Container()
+        : _videoPlayerPlatform.buildView(_textureId);
   }
 }
 
