@@ -28,7 +28,7 @@ dependencies:
     git:
       url: git@github.com:d3xt3r2909/plugins.git
       path: packages/video_player/video_player_platform_interface
-      ref: v2.2.7-ads
+      ref: v2.2.7-ads.dev2
 
 dev_dependencies:
   flutter_test:
